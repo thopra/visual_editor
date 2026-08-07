@@ -6,40 +6,22 @@ namespace TYPO3\CMS\VisualEditor\ViewHelpers\Render;
 
 use InvalidArgumentException;
 use Psr\Http\Message\ServerRequestInterface;
-use TYPO3\CMS\Core\Configuration\Richtext as RichtextConfiguration;
 use TYPO3\CMS\Core\Domain\Exception\RecordPropertyNotFoundException;
-use TYPO3\CMS\Core\Domain\RecordFactory;
 use TYPO3\CMS\Core\Domain\RecordInterface;
-use TYPO3\CMS\Core\Html\RteHtmlParser;
 use TYPO3\CMS\Core\Information\Typo3Version;
 use TYPO3\CMS\Core\Page\AssetCollector;
-use TYPO3\CMS\Core\Schema\Field\InputFieldType;
 use TYPO3\CMS\Core\Schema\Field\TextFieldType;
-use TYPO3\CMS\Core\Schema\TcaSchemaFactory;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Extbase\DomainObject\DomainObjectInterface;
 use TYPO3\CMS\Fluid\ViewHelpers\Format\HtmlViewHelper;
 use TYPO3\CMS\Frontend\Page\PageInformation;
-use TYPO3\CMS\VisualEditor\Core\RichtText\RichTextConfigurationService;
-use TYPO3\CMS\VisualEditor\Core\RichtText\RichTextConfigurationServiceDto;
 use TYPO3\CMS\VisualEditor\EditableResult\Input;
 use TYPO3\CMS\VisualEditor\EditableResult\RichText;
+use TYPO3\CMS\VisualEditor\Editor\EditorFieldTag;
+use TYPO3\CMS\VisualEditor\Editor\EditorTagFactory;
 use TYPO3\CMS\VisualEditor\Service\EditModeService;
-use TYPO3\CMS\VisualEditor\Service\LocalizationService;
-use TYPO3\CMS\VisualEditor\Service\ModelToRawRecordService;
 use TYPO3Fluid\Fluid\Core\ViewHelper\AbstractViewHelper;
 use TYPO3Fluid\Fluid\Core\ViewHelper\InvalidArgumentValueException;
-use TYPO3Fluid\Fluid\Core\ViewHelper\TagBuilder;
-
-use function get_debug_type;
-use function htmlspecialchars;
-use function is_int;
-use function is_string;
-use function json_encode;
-use function nl2br;
-use function str_replace;
-
-use const JSON_THROW_ON_ERROR;
 
 /**
  * ViewHelper to render content based on records and fields from a TCA schema.
@@ -64,15 +46,8 @@ final class TextViewHelper extends AbstractViewHelper
 
     public function __construct(
         private readonly EditModeService $editModeService,
-        private readonly RecordFactory $recordFactory,
-        private readonly TcaSchemaFactory $tcaSchema,
-        private readonly RteHtmlParser $rteHtmlParser,
         private readonly AssetCollector $assetCollector,
-        private readonly RichTextConfigurationService $richTextConfigurationService,
-        private readonly RichtextConfiguration $richtext,
         private readonly Typo3Version $typo3Version,
-        private readonly LocalizationService $localizationService,
-        private readonly ModelToRawRecordService $modelToRawRecordService,
     ) {
     }
 
@@ -105,26 +80,12 @@ final class TextViewHelper extends AbstractViewHelper
 
         $record = $this->renderChildren();
         $field = $this->arguments['field'];
-
-        if ($record instanceof PageInformation) {
-            $record = $this->recordFactory->createResolvedRecordFromDatabaseRow('pages', $record->getPageRecord());
-        }
-
-        if ($record instanceof DomainObjectInterface) {
-            $record = $this->modelToRawRecordService->modelToRawRecord($record);
-        }
-
-        if (!$record instanceof RecordInterface) {
-            throw new InvalidArgumentException(
-                'The record argument must be an instance of ' . self::RECORD_TYPE . '. Given: ' . get_debug_type(
-                    $record,
-                ),
-                1770539910,
-            );
-        }
-
         try {
-            $value = $record->get($field) ?? '';
+            $tag = GeneralUtility::makeInstance(EditorTagFactory::class)->getField(
+                $request,
+                $record,
+                $field
+            );
         } catch (RecordPropertyNotFoundException $recordPropertyNotFoundException) {
             if ($this->arguments['optional']) {
                 return null;
@@ -137,201 +98,38 @@ final class TextViewHelper extends AbstractViewHelper
             );
         }
 
-        if (!is_string($value)) {
-            $table = $record->getMainType();
-            throw new InvalidArgumentException(
-                'The value of the field "' . $table . '.' . $field . '" must be a string. Given: ' . get_debug_type($value),
-                1770321858,
-            );
+        foreach ($tag->getJavascriptModules() as $module) {
+            $this->assetCollector->addJavascriptModule($module);
         }
 
-        $canEdit = $this->editModeService->canEditField($record, $field, $request);
-
-        $schema = $this->tcaSchema->get($record->getFullType());
-        $tableLabel = $schema->getTitle($this->localizationService->tryTranslation(...));
-
-        $fieldSchema = $schema->getField($field);
-        $label = $this->localizationService->tryTranslation($fieldSchema->getLabel());
-
-        $label = $tableLabel . ': ' . $label;
-
-        if ($fieldSchema instanceof InputFieldType) {
-            return $this->renderInput($value, $record, $fieldSchema, $label, $canEdit);
+        if (!($tag->getField() instanceof TextFieldType) || !$tag->getField()->isRichText()) {
+            return $this->renderInput($tag);
         }
 
-        if ($fieldSchema instanceof TextFieldType) {
-            if (!$fieldSchema->isRichText()) {
-                return $this->renderInput($value, $record, $fieldSchema, $label, $canEdit, true);
-            }
-
-            return $this->renderRichText($value, $record, $fieldSchema, $label, $canEdit);
-        }
-
-        $table = $record->getMainType();
-        throw new InvalidArgumentException('The field "' . $table . '.' . $field . '" is not supported. Given: ' . get_debug_type($fieldSchema), 1770618219);
+        return $this->renderRichText($tag);
     }
 
-    private function renderInput(
-        string $value,
-        RecordInterface $record,
-        InputFieldType|TextFieldType $field,
-        string $label,
-        bool $editMode,
-        bool $allowNewlines = false,
-    ): Input {
-        $html = htmlspecialchars($value);
-        if ($allowNewlines) {
-            $html = nl2br(htmlspecialchars(str_replace('<br>', "\n", $value)));
+    private function renderInput(EditorFieldTag $tag): Input {
+        if (!$tag->isAllowedToModify()) {
+            return new Input($tag->getLabel(), $tag->getTagBuilder()->getContent(), !$tag->getValue(), $tag->getValue()); // TODO maybe we should remove the Input and RichText classes?
         }
 
-        if (!$editMode) {
-            return new Input($label, $html, !$value, $value); // TODO maybe we should remove the Input and RichText classes?
-        }
-
-        $tag = GeneralUtility::makeInstance(TagBuilder::class);
-        $tag->setTagName('ve-editable-text');
-        $tag->addAttribute('table', $record->getMainType());
-        $tag->addAttribute('uid', (string)($record->getComputedProperties()->getLocalizedUid() ?: $record->getComputedProperties()->getVersionedUid() ?: $record->getUid()));
-        $tag->addAttribute('field', $field->getName());
-        $tag->addAttribute('fieldPositionId', $record->getMainType() . ':' . $record->getUid() . ':' . $field->getName());
-
-        $tag->addAttribute('name', $label);
-
-        $title = $this->localizationService->tryTranslation(
-            'LLL:EXT:visual_editor/Resources/Private/Language/locallang.xlf:editable.title',
-            [$label],
-        );
-        $tag->addAttribute('title', $title);
-        $tag->addAttribute('allowNewlines', $allowNewlines);
-        $tag->addAttribute('value', str_replace('<br>', "\n", $value));
-        $tag->addAttribute('validation', $this->getInputValidationConfiguration($field, $allowNewlines));
-
-        $tag->setContent($html);
-
-        $tag->forceClosingTag(true);
-
-        return new Input($label, $tag->render(), !$value, $value ?: '');
+        return new Input($tag->getLabel(), $tag->getTagBuilder()->render(), !$tag->getValue(), $tag->getValue() ?: '');
     }
 
-    private function getInputValidationConfiguration(InputFieldType|TextFieldType $field, bool $allowNewlines): string
+    private function renderRichText(EditorFieldTag $tag): RichText
     {
-        $config = $field->getConfiguration();
-        $validation = [
-            'required' => $field->isRequired(),
-            'allowNewlines' => $allowNewlines,
-        ];
-
-        $min = $config['min'] ?? null;
-        if (is_int($min) || (is_string($min) && $min !== '')) {
-            $min = (int)$min;
-            if ($min > 0) {
-                $validation['min'] = $min;
-            }
-        }
-
-        $max = $config['max'] ?? null;
-        if (is_int($max) || (is_string($max) && $max !== '')) {
-            $max = (int)$max;
-            if ($max > 0) {
-                $validation['max'] = $max;
-            }
-        }
-
-        $evalList = array_flip(GeneralUtility::trimExplode(',', (string)($config['eval'] ?? ''), true));
-
-        $evals = [];
-        $evalOrder = ['trim', 'upper', 'lower', 'alpha', 'num', 'alphanum', 'alphanum_x', 'nospace'];
-        foreach ($evalOrder as $rule) {
-            if (array_key_exists($rule, $evalList)) {
-                $evals[] = $rule;
-            }
-        }
-
-        if ($evals !== []) {
-            $validation['eval'] = $evals;
-        }
-
-        return json_encode($validation, JSON_THROW_ON_ERROR);
-    }
-
-    private function renderRichText(string $value, RecordInterface $record, TextFieldType $field, string $label, bool $editMode): RichText
-    {
-        if (!$editMode) {
+        if (!$tag->isAllowedToModify()) {
             $renderingContext = $this->renderingContext ?? throw new InvalidArgumentException('$this->renderingContext is not available', 1772464098);
             $escapedValue = $renderingContext->getViewHelperInvoker()->invoke(
                 HtmlViewHelper::class,
                 [],
                 $renderingContext,
-                fn(): string => $value,
+                fn(): string => $tag->getValue(),
             );
-            return new RichText($label, $escapedValue, $value === '', $value);
+            return new RichText($tag->getLabel(), $escapedValue, $tag->getValue() === '', $tag->getValue());
         }
 
-        [$options, $processingConfiguration] = $this->getOptions($record, $field->getName());
-        $escapedValue = $this->rteHtmlParser->transformTextForRichTextEditor($value, $processingConfiguration);
-
-        $tag = GeneralUtility::makeInstance(TagBuilder::class);
-        $tag->setTagName('ve-editable-rich-text');
-        $tag->addAttribute('table', $record->getMainType());
-        $tag->addAttribute('uid', (string)($record->getComputedProperties()->getLocalizedUid() ?: $record->getComputedProperties()->getVersionedUid() ?: $record->getUid()));
-        $tag->addAttribute('field', $field->getName());
-        $tag->addAttribute('fieldPositionId', $record->getMainType() . ':' . $record->getUid() . ':' . $field->getName());
-        $tag->addAttribute('name', $label);
-
-        $title = $this->localizationService->tryTranslation(
-            'LLL:EXT:visual_editor/Resources/Private/Language/locallang.xlf:editable.title',
-            [$label],
-        );
-        $tag->addAttribute('title', $title);
-        $tag->addAttribute('options', $options);
-
-        $tag->setContent($escapedValue);
-
-        $tag->forceClosingTag(true);
-        return new RichText($label, $tag->render(), $value === '', $value);
-    }
-
-    /**
-     * @return array{0:string, 1:array<mixed>}
-     */
-    private function getOptions(RecordInterface $record, string $field): array
-    {
-        $schema = $this->tcaSchema->get($record->getFullType());
-        $richtextConfiguration = $this->richtext->getConfiguration(
-            $record->getMainType(),
-            $field,
-            $record->getPid(),
-            $record->getRecordType() ?? '',
-            $schema->getField($field)->getConfiguration(),
-        );
-
-        $rawRecord = $record->getRawRecord() ?? $record;
-        $richTextConfigurationServiceDto = new RichTextConfigurationServiceDto(
-            tableName: $record->getMainType(),
-            uid: $record->getComputedProperties()->getLocalizedUid() ?: $record->getComputedProperties()->getVersionedUid() ?: $record->getUid(),
-            fieldName: $field,
-            recordTypeValue: $record->getRecordType() ?? '',
-            effectivePid: $record->getPid(),
-            richtextConfigurationName: $richtextConfiguration['preset'],
-            label: 'Text',
-            placeholder: '',
-            readOnly: false,
-            data: $rawRecord->toArray(),
-            additionalConfiguration: $richtextConfiguration['editor']['config'],
-            externalPlugins: $richtextConfiguration['editor']['externalPlugins'],
-        );
-
-        $config = $this->richTextConfigurationService->resolveCkEditorConfiguration($richTextConfigurationServiceDto);
-
-        unset($config['height']); // height is set by the content itself and css
-        $config['debug'] = false; // for now we disable debug mode
-
-        // load required JavaScript modules:
-        foreach ($config['importModules'] as $importModule) {
-            $this->assetCollector->addJavaScriptModule($importModule['module']);
-        }
-
-        $this->assetCollector->addJavaScriptModule('@typo3/ckeditor5/translations/' . $config['language']['ui'] . '.js');
-        return [json_encode($config, JSON_THROW_ON_ERROR), $richtextConfiguration['proc.'] ?? []];
+        return new RichText($tag->getLabel(), $tag->getTagBuilder()->render(), $tag->getValue() === '', $tag->getValue());
     }
 }
