@@ -103,7 +103,9 @@ final class ImageViewHelper extends AbstractTagBasedViewHelper
             return null;
         }
 
-        $backendEditUrl = (string)$this->editModeService->getBackendEditUrl($request);
+        $pageEditingInformation = $request->getAttribute('frontend.visualEditor');
+
+        $backendEditUrl = (string)$pageEditingInformation->getBackendEditUrl();
         $editParams = [
             'edit' => [$table => [$uid => 'edit']],
             'columnsOnly' => [$table => $fields],
