@@ -9,7 +9,7 @@ use TYPO3\CMS\Core\Attribute\AsEventListener;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Fluid\Event\ModifyRenderedContentAreaEvent;
 use TYPO3\CMS\VisualEditor\BackwardsCompatibility\Event\RenderContentAreaEvent as V13RenderContentAreaEvent;
-use TYPO3\CMS\VisualEditor\Editor\EditorTagFactory;
+use TYPO3\CMS\VisualEditor\Editor\EditorComponentFactory;
 use TYPO3\CMS\VisualEditor\Service\EditModeService;
 use TYPO3\CMS\VisualEditor\Service\LocalizationService;
 
@@ -30,7 +30,7 @@ final readonly class RenderContentAreaEventListener
 
         $this->editModeService->init($event->getRequest());
 
-        $tagFactory = GeneralUtility::makeInstance(EditorTagFactory::class);
+        $tagFactory = GeneralUtility::makeInstance(EditorComponentFactory::class);
         $tag = $tagFactory->getContentArea(
             $event->getRequest(),
             $event->getContentArea()->getColPos(),

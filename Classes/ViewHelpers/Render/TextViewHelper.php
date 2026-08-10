@@ -17,8 +17,8 @@ use TYPO3\CMS\Fluid\ViewHelpers\Format\HtmlViewHelper;
 use TYPO3\CMS\Frontend\Page\PageInformation;
 use TYPO3\CMS\VisualEditor\EditableResult\Input;
 use TYPO3\CMS\VisualEditor\EditableResult\RichText;
-use TYPO3\CMS\VisualEditor\Editor\EditorFieldTag;
-use TYPO3\CMS\VisualEditor\Editor\EditorTagFactory;
+use TYPO3\CMS\VisualEditor\Editor\EditorFieldComponent;
+use TYPO3\CMS\VisualEditor\Editor\EditorComponentFactory;
 use TYPO3\CMS\VisualEditor\Service\EditModeService;
 use TYPO3Fluid\Fluid\Core\ViewHelper\AbstractViewHelper;
 use TYPO3Fluid\Fluid\Core\ViewHelper\InvalidArgumentValueException;
@@ -81,7 +81,7 @@ final class TextViewHelper extends AbstractViewHelper
         $record = $this->renderChildren();
         $field = $this->arguments['field'];
         try {
-            $tag = GeneralUtility::makeInstance(EditorTagFactory::class)->getField(
+            $tag = GeneralUtility::makeInstance(EditorComponentFactory::class)->getField(
                 $request,
                 $record,
                 $field
@@ -109,7 +109,7 @@ final class TextViewHelper extends AbstractViewHelper
         return $this->renderRichText($tag);
     }
 
-    private function renderInput(EditorFieldTag $tag): Input {
+    private function renderInput(EditorFieldComponent $tag): Input {
         if (!$tag->isAllowedToModify()) {
             return new Input($tag->getLabel(), $tag->getTagBuilder()->getContent(), !$tag->getValue(), $tag->getValue()); // TODO maybe we should remove the Input and RichText classes?
         }
@@ -117,7 +117,7 @@ final class TextViewHelper extends AbstractViewHelper
         return new Input($tag->getLabel(), $tag->getTagBuilder()->render(), !$tag->getValue(), $tag->getValue() ?: '');
     }
 
-    private function renderRichText(EditorFieldTag $tag): RichText
+    private function renderRichText(EditorFieldComponent $tag): RichText
     {
         if (!$tag->isAllowedToModify()) {
             $renderingContext = $this->renderingContext ?? throw new InvalidArgumentException('$this->renderingContext is not available', 1772464098);

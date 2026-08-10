@@ -6,7 +6,7 @@ namespace TYPO3\CMS\VisualEditor\Editor;
 
 use TYPO3Fluid\Fluid\Core\ViewHelper\TagBuilder;
 
-class EditorTag
+class EditorComponent
 {
     protected TagBuilder $tagBuilder;
     protected string $content = "";

@@ -8,7 +8,7 @@ use TYPO3\CMS\Core\Domain\RecordInterface;
 use TYPO3\CMS\Core\Schema\Field\InputFieldType;
 use TYPO3\CMS\Core\Schema\Field\TextFieldType;
 
-class EditorFieldTag extends EditorTag
+class EditorFieldComponent extends EditorComponent
 {
     protected string $value = '';
     protected string $label = '';
@@ -21,7 +21,7 @@ class EditorFieldTag extends EditorTag
         return $this->value;
     }
 
-    public function setValue(string $value): EditorFieldTag
+    public function setValue(string $value): EditorFieldComponent
     {
         $this->value = $value;
         return $this;
@@ -32,7 +32,7 @@ class EditorFieldTag extends EditorTag
         return $this->label;
     }
 
-    public function setLabel(string $label): EditorFieldTag
+    public function setLabel(string $label): EditorFieldComponent
     {
         $this->label = $label;
         return $this;
@@ -43,7 +43,7 @@ class EditorFieldTag extends EditorTag
         return $this->record;
     }
 
-    public function setRecord(RecordInterface $record): EditorFieldTag
+    public function setRecord(RecordInterface $record): EditorFieldComponent
     {
         $this->record = $record;
         return $this;
@@ -54,7 +54,7 @@ class EditorFieldTag extends EditorTag
         return $this->field;
     }
 
-    public function setField(TextFieldType|InputFieldType $field): EditorFieldTag
+    public function setField(TextFieldType|InputFieldType $field): EditorFieldComponent
     {
         $this->field = $field;
         return $this;
@@ -65,7 +65,7 @@ class EditorFieldTag extends EditorTag
         return $this->allowedToModify;
     }
 
-    public function setAllowedToModify(bool $allowedToModify): EditorFieldTag
+    public function setAllowedToModify(bool $allowedToModify): EditorFieldComponent
     {
         $this->allowedToModify = $allowedToModify;
         return $this;

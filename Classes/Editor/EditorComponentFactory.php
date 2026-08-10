@@ -29,7 +29,7 @@ use B13\Container\Domain\Model\Container;
 use UnexpectedValueException;
 use InvalidArgumentException;
 
-final readonly class EditorTagFactory implements SingletonInterface
+final readonly class EditorComponentFactory implements SingletonInterface
 {
     public function __construct(
         private EditModeService $editModeService,
@@ -54,7 +54,7 @@ final readonly class EditorTagFactory implements SingletonInterface
      * @param string[]|null $allowedContentTypes A list of allowed CTypes in this column
      * @param string[]|null $disallowedContentTypes A list of disallowed CTypes in this column
      * @param Container|int|null $containerParent If the extension container is installed, you can specify the current container object or uid of the parent elements
-     * @return EditorTag
+     * @return EditorComponent
      */
     public function getContentArea(
         ServerRequestInterface $request,
@@ -64,7 +64,7 @@ final readonly class EditorTagFactory implements SingletonInterface
         ?array $allowedContentTypes = [],
         ?array $disallowedContentTypes = [],
         Container|int|null $containerParent = null
-    ): EditorTag
+    ): EditorComponent
     {
         $tag = GeneralUtility::makeInstance(TagBuilder::class, 've-content-area', $content ?: '');
         $tag->forceClosingTag(true);
@@ -86,7 +86,7 @@ final readonly class EditorTagFactory implements SingletonInterface
             $tag->addAttribute('tx_container_parent', (string)$containerParent);
         }
 
-        return new EditorTag($tag);
+        return new EditorComponent($tag);
     }
 
     /**
@@ -108,7 +108,7 @@ final readonly class EditorTagFactory implements SingletonInterface
         string $table,
         array $databaseRow,
         ?string $content = null
-    ): EditorTag
+    ): EditorComponent
     {
         $canModifyRecord = true;
         /** @var BackendUserAuthentication $beUser */
@@ -171,7 +171,7 @@ final readonly class EditorTagFactory implements SingletonInterface
             // TODO (test with sys_language_uid > 1) (test with workspace) possibly we need to find the correct overlay uid
         }
 
-        return new EditorTag($tag);
+        return new EditorComponent($tag);
     }
 
     /**
@@ -181,7 +181,7 @@ final readonly class EditorTagFactory implements SingletonInterface
      * @param ServerRequestInterface $request
      * @param RecordInterface|PageInformation|DomainObjectInterface $record
      * @param string $field
-     * @return EditorFieldTag|null
+     * @return EditorFieldComponent|null
      * @throws \JsonException
      * @throws \Psr\Container\ContainerExceptionInterface
      * @throws \Psr\Container\NotFoundExceptionInterface
@@ -192,7 +192,7 @@ final readonly class EditorTagFactory implements SingletonInterface
         ServerRequestInterface $request, // even though currently not used, we should keep passing the request object mandatory for each method
         RecordInterface|PageInformation|DomainObjectInterface $record,
         string $field
-    ): ?EditorFieldTag
+    ): ?EditorFieldComponent
     {
         if ($record instanceof PageInformation) {
             $record = $this->recordFactory->createResolvedRecordFromDatabaseRow('pages', $record->getPageRecord());
@@ -254,7 +254,7 @@ final readonly class EditorTagFactory implements SingletonInterface
      * @param string $value
      * @param string $label
      * @param bool $allowNewlines
-     * @return EditorFieldTag|null
+     * @return EditorFieldComponent|null
      * @throws \JsonException
      */
     public function getFieldInput(
@@ -264,7 +264,7 @@ final readonly class EditorTagFactory implements SingletonInterface
         string $value,
         string $label,
         bool $allowNewlines = false
-    ): ?EditorFieldTag
+    ): ?EditorFieldComponent
     {
         $canEdit = $this->editModeService->canEditField($record, $field->getName(), $request);
         if (!$canEdit) {
@@ -298,15 +298,15 @@ final readonly class EditorTagFactory implements SingletonInterface
 
         $tag->forceClosingTag(true);
 
-        $editorTag = new EditorFieldTag($tag);
-        $editorTag
+        $component = new EditorFieldComponent($tag);
+        $component
             ->setValue($value)
             ->setLabel($label)
             ->setField($field)
             ->setAllowedToModify($this->editModeService->canEditField($record, $field->getName(), $request))
             ->setRecord($record);
 
-        return $editorTag;
+        return $component;
     }
 
     /**
@@ -318,7 +318,7 @@ final readonly class EditorTagFactory implements SingletonInterface
      * @param InputFieldType|TextFieldType $field
      * @param string $value
      * @param string $label
-     * @return EditorFieldTag|null
+     * @return EditorFieldComponent|null
      * @throws \JsonException
      */
     public function getFieldRichText(
@@ -327,7 +327,7 @@ final readonly class EditorTagFactory implements SingletonInterface
         InputFieldType|TextFieldType $field,
         string $value,
         string $label
-    ): ?EditorFieldTag
+    ): ?EditorFieldComponent
     {
         $canEdit = $this->editModeService->canEditField($record, $field->getName(), $request);
         if (!$canEdit) {
@@ -367,8 +367,8 @@ final readonly class EditorTagFactory implements SingletonInterface
         }
         $jsModules[] = '@typo3/ckeditor5/translations/' . $rteOptions['language']['ui'] . '.js';
 
-        $editorTag = new EditorFieldTag($tag);
-        $editorTag
+        $component = new EditorFieldComponent($tag);
+        $component
             ->setValue($value)
             ->setLabel($label)
             ->setField($field)
@@ -376,7 +376,7 @@ final readonly class EditorTagFactory implements SingletonInterface
             ->setAllowedToModify($this->editModeService->canEditField($record, $field->getName(), $request))
             ->setJavascriptModules($jsModules);
 
-        return $editorTag;
+        return $component;
     }
 
     private function getContentTypeLabel(Record $record): string

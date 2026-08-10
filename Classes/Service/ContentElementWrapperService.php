@@ -7,7 +7,7 @@ namespace TYPO3\CMS\VisualEditor\Service;
 use Psr\Http\Message\ServerRequestInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autoconfigure;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
-use TYPO3\CMS\VisualEditor\Editor\EditorTagFactory;
+use TYPO3\CMS\VisualEditor\Editor\EditorComponentFactory;
 
 #[Autoconfigure(public: true)]
 final readonly class ContentElementWrapperService
@@ -28,7 +28,7 @@ final readonly class ContentElementWrapperService
 
         $this->editModeService->init($request);
 
-        $tag = GeneralUtility::makeInstance(EditorTagFactory::class)->getElement(
+        $tag = GeneralUtility::makeInstance(EditorComponentFactory::class)->getElement(
             request: $request,
             table: $table,
             databaseRow: $data,
