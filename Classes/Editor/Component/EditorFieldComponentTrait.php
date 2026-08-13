@@ -2,16 +2,17 @@
 
 declare(strict_types=1);
 
-namespace TYPO3\CMS\VisualEditor\Editor;
+namespace TYPO3\CMS\VisualEditor\Editor\Component;
 
 use TYPO3\CMS\Core\Domain\RecordInterface;
 use TYPO3\CMS\Core\Schema\Field\InputFieldType;
 use TYPO3\CMS\Core\Schema\Field\TextFieldType;
 
-class EditorFieldComponent extends EditorComponent
+trait EditorFieldComponentTrait
 {
     protected string $value = '';
-    protected string $label = '';
+    protected string $title = '';
+    protected string $name = '';
     protected RecordInterface $record;
     protected InputFieldType|TextFieldType $field;
     protected bool $allowedToModify = TRUE;
@@ -21,20 +22,20 @@ class EditorFieldComponent extends EditorComponent
         return $this->value;
     }
 
-    public function setValue(string $value): EditorFieldComponent
+    public function setValue(string $value): static
     {
         $this->value = $value;
         return $this;
     }
 
-    public function getLabel(): string
+    public function getName(): string
     {
-        return $this->label;
+        return $this->name;
     }
 
-    public function setLabel(string $label): EditorFieldComponent
+    public function setName(string $name): static
     {
-        $this->label = $label;
+        $this->name = $name;
         return $this;
     }
 
@@ -43,7 +44,7 @@ class EditorFieldComponent extends EditorComponent
         return $this->record;
     }
 
-    public function setRecord(RecordInterface $record): EditorFieldComponent
+    public function setRecord(RecordInterface $record): static
     {
         $this->record = $record;
         return $this;
@@ -54,7 +55,7 @@ class EditorFieldComponent extends EditorComponent
         return $this->field;
     }
 
-    public function setField(TextFieldType|InputFieldType $field): EditorFieldComponent
+    public function setField(TextFieldType|InputFieldType $field): static
     {
         $this->field = $field;
         return $this;
@@ -65,9 +66,20 @@ class EditorFieldComponent extends EditorComponent
         return $this->allowedToModify;
     }
 
-    public function setAllowedToModify(bool $allowedToModify): EditorFieldComponent
+    public function setAllowedToModify(bool $allowedToModify): static
     {
         $this->allowedToModify = $allowedToModify;
+        return $this;
+    }
+
+    public function getTitle(): string
+    {
+        return $this->title;
+    }
+
+    public function setTitle(string $title): static
+    {
+        $this->title = $title;
         return $this;
     }
 }

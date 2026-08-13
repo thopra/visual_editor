@@ -17,7 +17,8 @@ use TYPO3\CMS\Fluid\ViewHelpers\Format\HtmlViewHelper;
 use TYPO3\CMS\Frontend\Page\PageInformation;
 use TYPO3\CMS\VisualEditor\EditableResult\Input;
 use TYPO3\CMS\VisualEditor\EditableResult\RichText;
-use TYPO3\CMS\VisualEditor\Editor\EditorFieldComponent;
+use TYPO3\CMS\VisualEditor\Editor\Component\InputFieldComponent;
+use TYPO3\CMS\VisualEditor\Editor\Component\RichTextFieldComponent;
 use TYPO3\CMS\VisualEditor\Editor\EditorComponentFactory;
 use TYPO3\CMS\VisualEditor\Service\EditModeService;
 use TYPO3Fluid\Fluid\Core\ViewHelper\AbstractViewHelper;
@@ -102,22 +103,23 @@ final class TextViewHelper extends AbstractViewHelper
             $this->assetCollector->addJavascriptModule($module);
         }
 
-        if (!($tag->getField() instanceof TextFieldType) || !$tag->getField()->isRichText()) {
+        // TODO: Not sure if it is still required to have the EditableResult\Input and EditableResult\RichText classes - kept it to keep return value fully compatible
+        if (!($tag instanceof RichTextFieldComponent)) {
             return $this->renderInput($tag);
         }
 
         return $this->renderRichText($tag);
     }
 
-    private function renderInput(EditorFieldComponent $tag): Input {
+    private function renderInput(InputFieldComponent $tag): Input {
         if (!$tag->isAllowedToModify()) {
-            return new Input($tag->getLabel(), $tag->getTagBuilder()->getContent(), !$tag->getValue(), $tag->getValue()); // TODO maybe we should remove the Input and RichText classes?
+            return new Input($tag->getName(), $tag->getTagBuilder()->getContent(), !$tag->getValue(), $tag->getValue()); // TODO maybe we should remove the Input and RichText classes?
         }
 
-        return new Input($tag->getLabel(), $tag->getTagBuilder()->render(), !$tag->getValue(), $tag->getValue() ?: '');
+        return new Input($tag->getName(), $tag->getTagBuilder()->render(), !$tag->getValue(), $tag->getValue() ?: '');
     }
 
-    private function renderRichText(EditorFieldComponent $tag): RichText
+    private function renderRichText(RichTextFieldComponent $tag): RichText
     {
         if (!$tag->isAllowedToModify()) {
             $renderingContext = $this->renderingContext ?? throw new InvalidArgumentException('$this->renderingContext is not available', 1772464098);
@@ -127,9 +129,9 @@ final class TextViewHelper extends AbstractViewHelper
                 $renderingContext,
                 fn(): string => $tag->getValue(),
             );
-            return new RichText($tag->getLabel(), $escapedValue, $tag->getValue() === '', $tag->getValue());
+            return new RichText($tag->getName(), $escapedValue, $tag->getValue() === '', $tag->getValue());
         }
 
-        return new RichText($tag->getLabel(), $tag->getTagBuilder()->render(), $tag->getValue() === '', $tag->getValue());
+        return new RichText($tag->getName(), $tag->getTagBuilder()->render(), $tag->getValue() === '', $tag->getValue());
     }
 }

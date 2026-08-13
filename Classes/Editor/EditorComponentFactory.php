@@ -20,6 +20,10 @@ use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Extbase\DomainObject\DomainObjectInterface;
 use TYPO3\CMS\VisualEditor\Core\RichtText\RichTextConfigurationService;
 use TYPO3\CMS\VisualEditor\Core\RichtText\RichTextConfigurationServiceDto;
+use TYPO3\CMS\VisualEditor\Editor\Component\ContentAreaComponent;
+use TYPO3\CMS\VisualEditor\Editor\Component\ContentElementComponent;
+use TYPO3\CMS\VisualEditor\Editor\Component\InputFieldComponent;
+use TYPO3\CMS\VisualEditor\Editor\Component\RichTextFieldComponent;
 use TYPO3\CMS\VisualEditor\Service\EditModeService;
 use TYPO3\CMS\VisualEditor\Service\LocalizationService;
 use TYPO3\CMS\VisualEditor\Service\ModelToRawRecordService;
@@ -54,7 +58,7 @@ final readonly class EditorComponentFactory implements SingletonInterface
      * @param string[]|null $allowedContentTypes A list of allowed CTypes in this column
      * @param string[]|null $disallowedContentTypes A list of disallowed CTypes in this column
      * @param Container|int|null $containerParent If the extension container is installed, you can specify the current container object or uid of the parent elements
-     * @return EditorComponent
+     * @return ContentAreaComponent
      */
     public function getContentArea(
         ServerRequestInterface $request,
@@ -64,29 +68,28 @@ final readonly class EditorComponentFactory implements SingletonInterface
         ?array $allowedContentTypes = [],
         ?array $disallowedContentTypes = [],
         Container|int|null $containerParent = null
-    ): EditorComponent
+    ): ContentAreaComponent
     {
-        $tag = GeneralUtility::makeInstance(TagBuilder::class, 've-content-area', $content ?: '');
-        $tag->forceClosingTag(true);
-
         $pageInformation = $request->getAttribute('frontend.page.information');
         assert($pageInformation instanceof PageInformation);
         $pageUid = $pageInformation->getId();
 
-        $tag->addAttribute('target', (string)$pageUid);
-        $tag->addAttribute('colPos', (string)$colPos);
-        $tag->addAttribute('allowedContentTypes', implode(',', $allowedContentTypes));
-        $tag->addAttribute('disallowedContentTypes', implode(',', $disallowedContentTypes));
-        $tag->addAttribute('columnName', $this->localizationService->tryTranslation($columnName));
+        $component = (new ContentAreaComponent())
+                        ->setContent($content ?: '')
+                        ->setTarget($pageUid)
+                        ->setColPos($colPos)
+                        ->setColumnName($this->localizationService->tryTranslation($columnName))
+                        ->setAllowedContentTypes($allowedContentTypes)
+                        ->setDisallowedContentTypes($disallowedContentTypes);
 
         if ($containerParent instanceof Container) {
             $localizedUid = $containerParent->getContainerRecord()['_ORIG_uid'] ?? $containerParent->getContainerRecord()['_LOCALIZED_UID'] ?? $containerParent->getUidOfLiveWorkspace();
-            $tag->addAttribute('tx_container_parent', (string)$localizedUid); // TODO (test with sys_language_uid > 1) (test with workspace)
+            $component->setContainerParent($localizedUid); // TODO (test with sys_language_uid > 1) (test with workspace)
         } elseif(is_int($containerParent)) {
-            $tag->addAttribute('tx_container_parent', (string)$containerParent);
+            $component->setContainerParent($containerParent);
         }
 
-        return new EditorComponent($tag);
+        return $component;
     }
 
     /**
@@ -108,7 +111,7 @@ final readonly class EditorComponentFactory implements SingletonInterface
         string $table,
         array $databaseRow,
         ?string $content = null
-    ): EditorComponent
+    ): ContentElementComponent
     {
         $canModifyRecord = true;
         /** @var BackendUserAuthentication $beUser */
@@ -140,38 +143,13 @@ final readonly class EditorComponentFactory implements SingletonInterface
             $hiddenFieldName = ''; // user has no access to hidden field
         }
 
-        $tag = GeneralUtility::makeInstance(TagBuilder::class, 've-content-element', $content ?: '');
-        $tag->forceClosingTag(true);
-        $tag->addAttribute('elementName', $this->getContentTypeLabel($record));
-        $tag->addAttribute('CType', $record->get('CType'));
-        $tag->addAttribute('table', $table);
-
-        $uid = $record->getComputedProperties()->getLocalizedUid() ?: $record->getComputedProperties()->getVersionedUid() ?: $record->getUid();
-        $tag->addAttribute('id', $table . ':' . $uid);
-        $tag->addAttribute('uid', (string)$uid);
-        $tag->addAttribute('scrollPositionId', $table . ':' . $record->getUid());
-        $tag->addAttribute('pid', (string)$record->getPid());
-        $tag->addAttribute('colPos', $record->get('colPos'));
-        $tag->addAttribute('hiddenFieldName', $hiddenFieldName);
-        if ($canModifyRecord) {
-            $tag->addAttribute('canModifyRecord', 'true');
-        }
-
-        if (!$record->getLanguageInfo()?->getTranslationParent()) {
-            $tag->addAttribute('canBeMoved', 'true');
-        }
-
-        if ($record->getSystemProperties()?->isDisabled()) {
-            $tag->addAttribute('isHidden', 'true');
-        }
-
-        if ($record->has('tx_container_parent')) {
-            // EXT:container compatibility
-            $tag->addAttribute('tx_container_parent', $record->getRawRecord()->get('tx_container_parent'));
-            // TODO (test with sys_language_uid > 1) (test with workspace) possibly we need to find the correct overlay uid
-        }
-
-        return new EditorComponent($tag);
+        return (new ContentElementComponent($record))
+                    ->setContent($content ?: '')
+                    ->setHidden($record->getSystemProperties()?->isDisabled() ?: false)
+                    ->setHiddenFieldName($hiddenFieldName)
+                    ->setElementName($this->getContentTypeLabel($record))
+                    ->setCanModifyRecord($canModifyRecord)
+                    ->setCanBeMoved($record->getLanguageInfo()?->getTranslationParent() ?: false);
     }
 
     /**
@@ -181,7 +159,7 @@ final readonly class EditorComponentFactory implements SingletonInterface
      * @param ServerRequestInterface $request
      * @param RecordInterface|PageInformation|DomainObjectInterface $record
      * @param string $field
-     * @return EditorFieldComponent|null
+     * @return InputFieldComponent|null
      * @throws \JsonException
      * @throws \Psr\Container\ContainerExceptionInterface
      * @throws \Psr\Container\NotFoundExceptionInterface
@@ -192,7 +170,7 @@ final readonly class EditorComponentFactory implements SingletonInterface
         ServerRequestInterface $request, // even though currently not used, we should keep passing the request object mandatory for each method
         RecordInterface|PageInformation|DomainObjectInterface $record,
         string $field
-    ): ?EditorFieldComponent
+    ): InputFieldComponent|RichTextFieldComponent|null
     {
         if ($record instanceof PageInformation) {
             $record = $this->recordFactory->createResolvedRecordFromDatabaseRow('pages', $record->getPageRecord());
@@ -254,7 +232,7 @@ final readonly class EditorComponentFactory implements SingletonInterface
      * @param string $value
      * @param string $label
      * @param bool $allowNewlines
-     * @return EditorFieldComponent|null
+     * @return InputFieldComponent|null
      * @throws \JsonException
      */
     public function getFieldInput(
@@ -264,47 +242,26 @@ final readonly class EditorComponentFactory implements SingletonInterface
         string $value,
         string $label,
         bool $allowNewlines = false
-    ): ?EditorFieldComponent
+    ): ?InputFieldComponent
     {
         $canEdit = $this->editModeService->canEditField($record, $field->getName(), $request);
         if (!$canEdit) {
             return null;
         }
 
-        $html = htmlspecialchars($value);
-        if ($allowNewlines) {
-            $html = nl2br(htmlspecialchars(str_replace('<br>', "\n", $value)));
-        }
-
-        $tag = GeneralUtility::makeInstance(TagBuilder::class);
-        $tag->setTagName('ve-editable-text');
-        $tag->addAttribute('table', $record->getMainType());
-        $tag->addAttribute('uid', (string)($record->getComputedProperties()->getLocalizedUid() ?: $record->getComputedProperties()->getVersionedUid() ?: $record->getUid()));
-        $tag->addAttribute('field', $field->getName());
-        $tag->addAttribute('fieldPositionId', $record->getMainType() . ':' . $record->getUid() . ':' . $field->getName());
-
-        $tag->addAttribute('name', $label);
-
-        $title = $this->localizationService->tryTranslation(
+        $localizedLabel = $this->localizationService->tryTranslation(
             'LLL:EXT:visual_editor/Resources/Private/Language/locallang.xlf:editable.title',
             [$label],
         );
-        $tag->addAttribute('title', $title);
-        $tag->addAttribute('allowNewlines', $allowNewlines);
-        $tag->addAttribute('value', str_replace('<br>', "\n", $value));
-        $tag->addAttribute('validation', $this->getInputValidationConfiguration($field, $allowNewlines));
 
-        $tag->setContent($html);
-
-        $tag->forceClosingTag(true);
-
-        $component = new EditorFieldComponent($tag);
-        $component
-            ->setValue($value)
-            ->setLabel($label)
-            ->setField($field)
-            ->setAllowedToModify($this->editModeService->canEditField($record, $field->getName(), $request))
-            ->setRecord($record);
+        $component = (new InputFieldComponent($record))
+                        ->setValue($value)
+                        ->setName($label)
+                        ->setTitle($localizedLabel)
+                        ->setAllowNewLines($allowNewlines)
+                        ->setValidation($this->getInputValidationConfiguration($field, $allowNewlines))
+                        ->setField($field)
+                        ->setAllowedToModify($this->editModeService->canEditField($record, $field->getName(), $request));
 
         return $component;
     }
@@ -318,7 +275,7 @@ final readonly class EditorComponentFactory implements SingletonInterface
      * @param InputFieldType|TextFieldType $field
      * @param string $value
      * @param string $label
-     * @return EditorFieldComponent|null
+     * @return InputFieldComponent|null
      * @throws \JsonException
      */
     public function getFieldRichText(
@@ -327,7 +284,7 @@ final readonly class EditorComponentFactory implements SingletonInterface
         InputFieldType|TextFieldType $field,
         string $value,
         string $label
-    ): ?EditorFieldComponent
+    ): ?RichTextFieldComponent
     {
         $canEdit = $this->editModeService->canEditField($record, $field->getName(), $request);
         if (!$canEdit) {
@@ -335,28 +292,8 @@ final readonly class EditorComponentFactory implements SingletonInterface
         }
 
         $rteOptions = $this->getRTEOptions($record, $field->getName());
-        $options = json_encode($rteOptions, JSON_THROW_ON_ERROR);
         $processingConfiguration = $richtextConfiguration['proc.'] ?? [];
         $escapedValue = $this->rteHtmlParser->transformTextForRichTextEditor($value, $processingConfiguration);
-
-        $tag = GeneralUtility::makeInstance(TagBuilder::class);
-        $tag->setTagName('ve-editable-rich-text');
-        $tag->addAttribute('table', $record->getMainType());
-        $tag->addAttribute('uid', (string)($record->getComputedProperties()->getLocalizedUid() ?: $record->getComputedProperties()->getVersionedUid() ?: $record->getUid()));
-        $tag->addAttribute('field', $field->getName());
-        $tag->addAttribute('fieldPositionId', $record->getMainType() . ':' . $record->getUid() . ':' . $field->getName());
-        $tag->addAttribute('name', $label);
-
-        $title = $this->localizationService->tryTranslation(
-            'LLL:EXT:visual_editor/Resources/Private/Language/locallang.xlf:editable.title',
-            [$label],
-        );
-        $tag->addAttribute('title', $title);
-        $tag->addAttribute('options', $options);
-
-        $tag->setContent($escapedValue);
-
-        $tag->forceClosingTag(true);
 
         // Add required JavaScript modules to be loaded by the ViewHelper
         // This factory should be stateless and not have side effects, so we defer actually adding the modules with the
@@ -367,14 +304,20 @@ final readonly class EditorComponentFactory implements SingletonInterface
         }
         $jsModules[] = '@typo3/ckeditor5/translations/' . $rteOptions['language']['ui'] . '.js';
 
-        $component = new EditorFieldComponent($tag);
-        $component
-            ->setValue($value)
-            ->setLabel($label)
-            ->setField($field)
-            ->setRecord($record)
-            ->setAllowedToModify($this->editModeService->canEditField($record, $field->getName(), $request))
-            ->setJavascriptModules($jsModules);
+        $localizedLabel = $this->localizationService->tryTranslation(
+            'LLL:EXT:visual_editor/Resources/Private/Language/locallang.xlf:editable.title',
+            [$label],
+        );
+
+        $component = (new RichTextFieldComponent($record))
+                        ->setValue($value)
+                        ->setTitle($localizedLabel)
+                        ->setName($label)
+                        ->setField($field)
+                        ->setContent($escapedValue)
+                        ->setOptions($rteOptions)
+                        ->setAllowedToModify($this->editModeService->canEditField($record, $field->getName(), $request))
+                        ->setJavascriptModules($jsModules);
 
         return $component;
     }
@@ -429,7 +372,7 @@ final readonly class EditorComponentFactory implements SingletonInterface
         return $config;
     }
 
-    private function getInputValidationConfiguration(InputFieldType|TextFieldType $field, bool $allowNewlines): string
+    private function getInputValidationConfiguration(InputFieldType|TextFieldType $field, bool $allowNewlines): array
     {
         $config = $field->getConfiguration();
         $validation = [
@@ -467,6 +410,6 @@ final readonly class EditorComponentFactory implements SingletonInterface
             $validation['eval'] = $evals;
         }
 
-        return json_encode($validation, JSON_THROW_ON_ERROR);
+        return $validation;
     }
 }

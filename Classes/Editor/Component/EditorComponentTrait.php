@@ -2,20 +2,12 @@
 
 declare(strict_types=1);
 
-namespace TYPO3\CMS\VisualEditor\Editor;
+namespace TYPO3\CMS\VisualEditor\Editor\Component;
 
-use TYPO3Fluid\Fluid\Core\ViewHelper\TagBuilder;
-
-class EditorComponent
+trait EditorComponentTrait
 {
-    protected TagBuilder $tagBuilder;
     protected string $content = "";
     protected array $javascriptModules = [];
-
-    public function __construct(TagBuilder $tag)
-    {
-        $this->tagBuilder = $tag;
-    }
 
     public function getJavascriptModules(): array
     {
@@ -25,17 +17,6 @@ class EditorComponent
     public function setJavascriptModules(array $javascriptModules): static
     {
         $this->javascriptModules = $javascriptModules;
-        return $this;
-    }
-
-    public function getTagBuilder(): TagBuilder
-    {
-        return $this->tagBuilder;
-    }
-
-    public function setTagBuilder(TagBuilder $tag): static
-    {
-        $this->tagBuilder = $tag;
         return $this;
     }
 
